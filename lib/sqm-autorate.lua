@@ -983,9 +983,9 @@ local function reflector_peer_selector()
     nsleep(baseline_sleep_time_s, baseline_sleep_time_ns)
 
     while true do
-
         reselector_channel:receive(selector_sleep_time_s + selector_sleep_time_ns / 1e9, "reselect")
         local now_s, now_ns = get_current_time()
+
         if (now_s - last_reselection_s) + (now_ns - last_reselection_ns) / 1e9 > 5 * tick_duration then
             -- prevent reselection too quickly in a row
             reselection_count = reselection_count + 1
@@ -1018,7 +1018,6 @@ local function reflector_peer_selector()
             nsleep(baseline_sleep_time_s, baseline_sleep_time_ns)
 
             local candidates = {}
-
             local owd_tables = owd_data:get("owd_tables")
             local owd_recent = owd_tables["recent"]
 
@@ -1033,43 +1032,42 @@ local function reflector_peer_selector()
                     logger(loglevel.INFO, "No data found from candidate reflector: " .. peer .. " - skipping")
                 end
             end
-        end
 
-        -- Sort the candidates table now by ascending RTT
-        table.sort(candidates, rtt_compare)
+            -- Sort the candidates table now by ascending RTT
+            table.sort(candidates, rtt_compare)
 
-        -- Now we will just limit the candidates down to 2 * num_reflectors
-        local num_reflectors = num_reflectors
-        local candidate_pool_num = 2 * num_reflectors
-        if candidate_pool_num < #candidates then
-            for i = candidate_pool_num + 1, #candidates, 1 do
-                candidates[i] = nil
+            -- Now we will just limit the candidates down to 2 * num_reflectors
+            local num_reflectors = num_reflectors
+            local candidate_pool_num = 2 * num_reflectors
+            if candidate_pool_num < #candidates then
+                for i = candidate_pool_num + 1, #candidates, 1 do
+                    candidates[i] = nil
+                end
             end
-        end
-        for i, v in ipairs(candidates) do
-            logger(loglevel.INFO, "Fastest candidate " .. i .. ": " .. v[1] .. " - RTT: " .. v[2])
-        end
+            for i, v in ipairs(candidates) do
+                logger(loglevel.INFO, "Fastest candidate " .. i .. ": " .. v[1] .. " - RTT: " .. v[2])
+            end
 
-        -- Shuffle the deck so we avoid overwhelming good reflectors
-        candidates = shuffle_table(candidates)
+            -- Shuffle the deck so we avoid overwhelming good reflectors
+            candidates = shuffle_table(candidates)
 
-        local new_peers = {}
-        if #candidates < num_reflectors then
-            num_reflectors = #candidates
+            local new_peers = {}
+            if #candidates < num_reflectors then
+                num_reflectors = #candidates
+            end
+            for i = 1, num_reflectors, 1 do
+                new_peers[#new_peers + 1] = candidates[i][1]
+            end
+
+            for _, v in ipairs(new_peers) do
+                logger(loglevel.INFO, "New selected peer: " .. v)
+            end
+
+            reflector_data:set("reflector_tables", {
+                peers = new_peers,
+                pool = reflector_pool
+            })
         end
-        for i = 1, num_reflectors, 1 do
-            new_peers[#new_peers + 1] = candidates[i][1]
-        end
-
-        for _, v in ipairs(new_peers) do
-            logger(loglevel.INFO, "New selected peer: " .. v)
-        end
-
-        reflector_data:set("reflector_tables", {
-            peers = new_peers,
-            pool = reflector_pool
-        })
-
     end
 end
 ---------------------------- End Local Functions ----------------------------
