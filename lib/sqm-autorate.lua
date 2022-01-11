@@ -976,53 +976,62 @@ local function reflector_peer_selector()
     local baseline_sleep_time_ns = floor(((tick_duration * pi) % 1) * 1e9)
     local baseline_sleep_time_s = floor(tick_duration * pi)
 
+    local last_reselection_s,last_reselection_ns = get_current_time()
+    last_reselection_s = last_reselection_s - 6 * tick_duration -- pretend we selected something in the past so there's no delay
+
     -- Initial wait of several seconds to allow some OWD data to build up
     nsleep(baseline_sleep_time_s, baseline_sleep_time_ns)
 
     while true do
+
         reselector_channel:receive(selector_sleep_time_s + selector_sleep_time_ns / 1e9, "reselect")
-        reselection_count = reselection_count + 1
-        if reselection_count > 40 then
-            selector_sleep_time_s = 15 * 60 -- 15 mins
-        end
-        local peerhash = {} -- a hash table of next peers, to ensure uniqueness
-        local next_peers = {} -- an array of next peers
-        local reflector_tables = reflector_data:get("reflector_tables")
-        local reflector_pool = reflector_tables["pool"]
-
-        for k, v in pairs(reflector_tables["peers"]) do -- include all current peers
-            peerhash[v] = 1
-        end
-        for i = 1, 20, 1 do -- add 20 at random, but
-            local nextcandidate = reflector_pool[random(#reflector_pool)]
-            peerhash[nextcandidate] = 1
-        end
-        for k, v in pairs(peerhash) do
-            next_peers[#next_peers + 1] = k
-        end
-        -- Put all the pool members back into the peers for some re-baselining...
-        reflector_data:set("reflector_tables", {
-            peers = next_peers,
-            pool = reflector_pool
-        })
-
-        -- Wait for several seconds to allow all reflectors to be re-baselined
-        nsleep(baseline_sleep_time_s, baseline_sleep_time_ns)
-
-        local candidates = {}
-
-        local owd_tables = owd_data:get("owd_tables")
-        local owd_recent = owd_tables["recent"]
-
-        for i, peer in ipairs(next_peers) do
-            if owd_recent[peer] then
-                local up_del = owd_recent[peer].up_ewma
-                local down_del = owd_recent[peer].down_ewma
-                local rtt = up_del + down_del
-                candidates[#candidates + 1] = {peer, rtt}
-                logger(loglevel.INFO, "Candidate reflector: " .. peer .. " RTT: " .. rtt)
-            else
-                logger(loglevel.INFO, "No data found from candidate reflector: " .. peer .. " - skipping")
+        local now_s,now_ns = get_current_time()
+        if (now_s - last_reselection_s) + (now_ns  - last_reselection_ns)/1e9 > 5 * tick_duration then
+            -- prevent reselection too quickly in a row
+            reselection_count = reselection_count + 1
+            last_reselection_s,last_reselection_ns = get_current_time() -- record that we're doing a reselection
+            if reselection_count > 40 then
+                selector_sleep_time_s = 15 * 60 -- 15 mins
+            end
+            local peerhash = {} -- a hash table of next peers, to ensure uniqueness
+            local next_peers = {} -- an array of next peers
+            local reflector_tables = reflector_data:get("reflector_tables")
+            local reflector_pool = reflector_tables["pool"]
+            
+            for k, v in pairs(reflector_tables["peers"]) do -- include all current peers
+                peerhash[v] = 1
+            end
+            for i = 1, 20, 1 do -- add 20 at random, but
+                local nextcandidate = reflector_pool[random(#reflector_pool)]
+                peerhash[nextcandidate] = 1
+            end
+            for k, v in pairs(peerhash) do
+                next_peers[#next_peers + 1] = k
+            end
+            -- Put all the pool members back into the peers for some re-baselining...
+            reflector_data:set("reflector_tables", {
+                peers = next_peers,
+                pool = reflector_pool
+            })
+            
+            -- Wait for several seconds to allow all reflectors to be re-baselined
+            nsleep(baseline_sleep_time_s, baseline_sleep_time_ns)
+            
+            local candidates = {}
+            
+            local owd_tables = owd_data:get("owd_tables")
+            local owd_recent = owd_tables["recent"]
+            
+            for i, peer in ipairs(next_peers) do
+                if owd_recent[peer] then
+                    local up_del = owd_recent[peer].up_ewma
+                    local down_del = owd_recent[peer].down_ewma
+                    local rtt = up_del + down_del
+                    candidates[#candidates + 1] = {peer, rtt}
+                    logger(loglevel.INFO, "Candidate reflector: " .. peer .. " RTT: " .. rtt)
+                else
+                    logger(loglevel.INFO, "No data found from candidate reflector: " .. peer .. " - skipping")
+                end
             end
         end
 
