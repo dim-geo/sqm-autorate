@@ -245,8 +245,14 @@ local function update_cake_bandwidth(iface, rate_in_kbit)
     local is_changed = false
     rate_in_kbit = math.floor(rate_in_kbit)
     local duration = 5*1500*8/rate_in_kbit
-    local gamerate = rate_in_kbit*.15+400
+    if (duration < 25) then
+        duration=25
+    end
+    local gamerate = rate_in_kbit*0.15+400
     local gameburst = 10 * gamerate
+    if (gameburst > 0.97 * rate_in_kbit) then
+        gameburst = 0.97 * rate_in_kbit
+    end
     
     if (iface == dl_if and rate_in_kbit >= min_dl_rate) then
         os.execute(string.format("tc class change dev %s parent 1: classid 1:1 hfsc ls m2 %dkbit ul m2 %dkbit", iface, rate_in_kbit, rate_in_kbit ))
