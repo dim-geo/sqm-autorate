@@ -368,8 +368,8 @@ function M.initialise(requires, version)
         get_loglevel() == "TRACE" or
         get_loglevel() == "DEBUG"
 
-    M.tick_duration = 0.5 -- Frequency in seconds
-    M.min_change_interval = 0.5 -- don't change speeds unless this many seconds has passed since last change
+    M.tick_duration = 2 -- Frequency in seconds
+    M.min_change_interval = 2 -- don't change speeds unless this many seconds has passed since last change
 
     M.reflector_list_icmp = "/usr/lib/sqm-autorate/reflectors-icmp.csv"
     M.reflector_list_udp = "/usr/lib/sqm-autorate/reflectors-udp.csv"
