@@ -244,8 +244,59 @@ end
 local function update_cake_bandwidth(iface, rate_in_kbit)
     local is_changed = false
     rate_in_kbit = math.floor(rate_in_kbit)
-    if (iface == dl_if and rate_in_kbit >= min_dl_rate) or (iface == ul_if and rate_in_kbit >= min_ul_rate) then
-        os.execute(string.format("tc qdisc change root dev %s cake bandwidth %dKbit", iface, rate_in_kbit))
+    local duration = 5*1500*8/rate_in_kbit
+    local gamerate = rate_in_kbit*.15+400
+    local gameburst = 10 * gamerate
+    
+    if (iface == dl_if and rate_in_kbit >= min_dl_rate) then
+        os.execute(string.format("tc class change dev %s parent 1: classid 1:1 hfsc ls m2 %dkbit ul m2 %dkbit", iface, rate_in_kbit, rate_in_kbit ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:11 hfsc rt m1 %dkbit d %dms m2 %dkbit", iface, gameburst, duration, gamerate ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:12 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, 0.7*rate_in_kbit, duration, 0.59*rate_in_kbit ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:13 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, 0.2*rate_in_kbit, duration, 0.15*rate_in_kbit ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:14 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, 0.07*rate_in_kbit, duration, 0.04*rate_in_kbit ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:15 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, 0.03*rate_in_kbit, duration, 0.01*rate_in_kbit ))
+        
+        local pfifomin=5
+        local packetsize=350
+        local maxdel=25
+        
+        os.execute(string.format("tc qdisc change dev %s parent 1:11 pfifo limit %d", iface,pfifomin+maxdel*rate_in_kbit/8/packetsize ))
+        
+        local intvl=100+(2*1500*8/rate_in_kbit)
+        local targ=540*8/rate_in_kbit+4
+        local memory_limit=rate_in_kbit*25
+
+        os.execute(string.format("tc qdisc change dev %s parent 1:12 fq_codel memory_limit %d interval %dms target %dms quantum 2984", iface, memory_limit, intvl, targ))
+        os.execute(string.format("tc qdisc change dev %s parent 1:13 fq_codel memory_limit %d interval %dms target %dms quantum 2984", iface, memory_limit, intvl, targ))
+        os.execute(string.format("tc qdisc change dev %s parent 1:14 fq_codel memory_limit %d interval %dms target %dms quantum 2984", iface, memory_limit, intvl, targ))
+        os.execute(string.format("tc qdisc change dev %s parent 1:15 fq_codel memory_limit %d interval %dms target %dms quantum 2984", iface, memory_limit, intvl, targ))
+
+        is_changed = true
+    end
+    if (iface == ul_if and rate_in_kbit >= min_ul_rate) then
+        os.execute(string.format("tc class change dev %s parent 1: classid 1:1 hfsc ls m2 %dkbit ul m2 %dkbit", iface, rate_in_kbit, rate_in_kbit ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:11 hfsc rt m1 %dkbit d %dms m2 %dkbit", iface, gameburst, duration, gamerate ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:12 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, 0.7*rate_in_kbit, duration, 0.59*rate_in_kbit ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:13 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, 0.2*rate_in_kbit, duration, 0.15*rate_in_kbit ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:14 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, 0.07*rate_in_kbit, duration, 0.04*rate_in_kbit ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:15 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, 0.03*rate_in_kbit, duration, 0.01*rate_in_kbit ))
+        
+        local pfifomin=5
+        local packetsize=350
+        local maxdel=25
+        
+        os.execute(string.format("tc qdisc change dev %s parent 1:11 pfifo limit %d", iface,pfifomin+maxdel*rate_in_kbit/8/packetsize ))
+
+        local intvl=100+(2*1500*8/rate_in_kbit)
+        local targ=540*8/rate_in_kbit+4
+        local memory_limit=rate_in_kbit*25
+        local packet_limit=memory_limit/500
+
+        os.execute(string.format("tc qdisc change dev %s parent 1:12 sfq divisor 16384 limit %d flows 512 headdrop", iface, packet_limit))
+        os.execute(string.format("tc qdisc change dev %s parent 1:13 sfq divisor 16384 limit %d flows 512 headdrop", iface, packet_limit))
+        os.execute(string.format("tc qdisc change dev %s parent 1:14 sfq divisor 16384 limit %d flows 512 headdrop", iface, packet_limit))
+        os.execute(string.format("tc qdisc change dev %s parent 1:15 sfq divisor 16384 limit %d flows 512 headdrop", iface, packet_limit))
+
         is_changed = true
     end
     return is_changed
