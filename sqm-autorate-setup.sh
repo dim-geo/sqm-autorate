@@ -54,21 +54,6 @@ settings_file="sqma-settings.lua"
 utilities_file="sqma-utilities.lua"
 configure_file="configure.sh"
 
-# start of pre-installation checks
-cake=$(tc qdisc | grep -i cake)
-if [ -z "${cake}" ]; then
-    echo
-    echo "This installation script cannot find an instance of the CAKE SQM running on any"
-    echo "network interface. 'sqm-autorate' currently works only with the CAKE SQM"
-    echo "Please install and configure CAKE before attempting to install sqm-autorate"
-    echo
-    echo "After CAKE is installed and configured, its presence is detected by the"
-    echo "shell command 'tc qdisc | grep -i cake'"
-    echo
-    echo "Exiting with no change"
-    exit 0
-fi
-
 is_openwrt=unknown
 if [ -f "$owrt_release_file" ]; then
     is_openwrt=$(grep "$owrt_release_file" -e '^NAME=' | awk 'BEGIN { FS = "=" } { gsub(/"/, "", $2); print $2 }')
