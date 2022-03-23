@@ -146,6 +146,10 @@ local min_upload_speed = nil
 local min_download_speed = nil
 local loglevel = nil
 
+local upload_percentile = {}
+local download_percentile = {}
+
+
 -- utility functions to setup or import in M.initialise
 local limit = nil
 local floor = nil
@@ -209,6 +213,12 @@ function M.initialise(requires, settings)
 
     min_upload_speed = settings.min_ul_rate
     min_download_speed = settings.min_dl_rate
+
+    upload_percentile.median=settings.min_ul_rate
+    upload_percentile.step=settings.min_ul_rate
+
+    download_percentile.median=settings.min_dl_rate
+    download_percentile.step=settings.min_dl_rate
 
     upload_threshold_default = settings.ul_max_delta_owd
     download_threshold_default = settings.dl_max_delta_owd
@@ -349,14 +359,11 @@ local function calculate_thresholds(histogram_no, print_it, now)
             -- a heuristic in case of relatively low counts (eg. during the long initial build of the histogram)
             -- find the lowest bucket with a count > 1
             if histogram[result] == 1 then
-                local r = min_allowed_threshold
-                for i = min_allowed_threshold + 1, max_allowed_threshold do
-                    if histogram[result] > 1 then
-                        r = i
+                for i = result,min_allowed_threshold,-1 do
+                    if histogram[i] > 1 then
+                        result = i
+                        break
                     end
-                end
-                if result > r then
-                    result = r
                 end
             end
         end
@@ -434,6 +441,20 @@ local function adjust_speed_reset(readings, results, histogram_no)
     return results
 end
 
+local function calculate_median(start_values,percentile,value)
+    if start_values.median > value then
+        start_values.median = start_values.median - start_values.step * (1 - percentile)
+    elseif start_values.median < value then
+        start_values.median = start_values.median + start_values.step * percentile
+    end
+    if math.abs( value - start_values.median ) < start_values.step then
+       start_values.step = start_values.step / 2
+       if start_values.step < 1 then
+           start_values.step=1
+       end
+    end
+    return start_values
+end
 
 function M.process(readings)
     local current_time = readings.now_s
@@ -450,7 +471,7 @@ function M.process(readings)
     end
 
     if ( use_relative_low_load and readings.tx_load <= low_load_threshold )
-    or ( readings.up_utilisation <= min_upload_speed ) then      -- ignore readings when the network is in use
+    or ( not use_relative_low_load  and  readings.up_utilisation <= min_upload_speed ) then      -- ignore readings when the network is in use
 
         -- the bottom and top buckets are 'asymmetric', covering many more delays that are 'less' interesting
         local upload_delay = limit(ceil(readings.up_del_stat), min_allowed_threshold, max_allowed_threshold)
@@ -465,7 +486,7 @@ function M.process(readings)
     end
 
     if ( use_relative_low_load and readings.rx_load <= low_load_threshold )
-    or ( readings.down_utilisation <= min_download_speed ) then      -- ignore readings when the network is in use
+    or ( not use_relative_low_load and readings.down_utilisation <= min_download_speed ) then      -- ignore readings when the network is in use
         local download_delay = limit(ceil(readings.down_del_stat), min_allowed_threshold, max_allowed_threshold)
         local t = nil
         for i = 1, number_of_histograms do
@@ -506,6 +527,62 @@ function M.process(readings)
         upload_result_prev = results.ul_max_delta_owd
         download_result_prev = results.dl_max_delta_owd
     end
+
+    local downspeed=0
+    if results[next_dl_rate] ~= nil then
+        downspeed=results.next_dl_rate
+    else
+        downspeed=readings.next_dl_rate
+    end
+
+    local upspeed=0
+    if results[next_ul_rate] ~= nil then
+        upspeed=results.next_ul_rate
+    else
+        upspeed=readings.next_ul_rate
+    end
+
+    --logger(histogram_log_level,downspeed)
+    --logger(histogram_log_level,upspeed)
+
+    if readings.tx_load>low_load_threshold then
+        upload_percentile=calculate_median(upload_percentile,0.95,readings.cur_ul_rate)
+        if upspeed > readings.cur_ul_rate then
+            if upspeed > upload_percentile.median then
+                results.next_ul_rate= ceil(0.5* readings.cur_ul_rate + 0.5 * upspeed)
+            end
+        end
+    end
+    
+    if readings.rx_load>low_load_threshold then
+        download_percentile=calculate_median(download_percentile,0.95,readings.cur_dl_rate)
+        if downspeed > readings.cur_dl_rate then
+            if downspeed > download_percentile.median then
+                results.next_dl_rate= ceil(0.5* readings.cur_dl_rate + 0.5 * downspeed)
+            end
+        end
+    end
+--[[
+    if results[next_dl_rate] ~= nil then
+      if results.next_dl_rate > 8000 then
+          results.next_dl_rate=8000
+      end
+    else
+        if readings.next_dl_rate > 8000 then
+            results.next_dl_rate=8000
+        end
+    end
+
+    if results[next_ul_rate] ~= nil then
+      if results.next_ul_rate > 1000 then
+          results.next_ul_rate=1000
+      end
+    else
+        if readings.next_ul_rate > 1000 then
+            results.next_ul_rate=1000
+        end
+    end
+]] --
 
     return results
 end
