@@ -3,7 +3,7 @@
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export LUA_CPATH="/usr/lib/lua/5.1/?.so;./?.so;/usr/lib/lua/?.so;/usr/lib/lua/loadall.so"
-export LUA_PATH="/usr/share/lua/5.1/?.lua;/usr/share/lua/5.1/?/init.lua;./?.lua;/usr/share/lua/?.lua;/usr/share/lua/?/init.lua;/usr/lib/lua/?.lua;/usr/lib/lua/?/init.lua"
+export LUA_PATH="./?.lua;/usr/share/lua/5.1/?.lua;/usr/share/lua/5.1/?/init.lua;/usr/share/lua/?.lua;/usr/share/lua/?/init.lua;/usr/lib/lua/?.lua;/usr/lib/lua/?/init.lua"
 
 START=97
 STOP=4
@@ -16,13 +16,9 @@ service_triggers() {
     procd_add_reload_trigger "sqm-autorate"
 }
 
-reload() {
-    stop
-    start
-}
-
 start() {
-    luajit /usr/lib/sqm-autorate/sqm-autorate.lua &
+    cd /usr/lib/sqm-autorate
+    lua sqm-autorate.lua &
     echo $! >/tmp/run/sqm-autorate.pid
 }
 
@@ -30,8 +26,4 @@ stop() {
     if [ -f $PID_FILE ]; then
         kill -9 "$(cat $PID_FILE)" && rm -f $PID_FILE
     fi
-}
-
-boot() {
-    start
 }
