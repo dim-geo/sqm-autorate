@@ -38,7 +38,6 @@
 -- luacheck: ignore set_debug_threadname
 
 -- The versioning value for this script
-local _VERSION = "0.5.1  [release]"
 local _VERSION = "0.5.2"
 
 local requires = {}

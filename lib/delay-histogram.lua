@@ -358,7 +358,7 @@ local function calculate_thresholds(histogram_no, print_it, now)
             -- a heuristic in case of relatively low counts (eg. during the long initial build of the histogram)
             -- find the lowest bucket with a count > 1
             if histogram[result] == 1 then
-                for i = result,min_allowed_threshold,-1 do
+                for i = result - 1, min_allowed_threshold, -1 do
                     if histogram[i] > 1 then
                         result = i
                         break
@@ -471,8 +471,7 @@ function M.process(readings)
 
     -- ignore readings when the network is in use
     if ( use_relative_low_load and readings.tx_load <= low_load_threshold )
-    or ( not use_relative_low_load  and  readings.up_utilisation <= min_upload_speed ) then      -- ignore readings when the network is in use
-
+    or ( not use_relative_low_load and readings.up_utilisation <= min_upload_speed ) then
         -- the bottom and top buckets are 'asymmetric', covering many more delays that are 'less' interesting
         local upload_delay = limit(ceil(readings.up_del_stat), min_allowed_threshold, max_allowed_threshold)
 
@@ -486,7 +485,7 @@ function M.process(readings)
 
     -- ignore readings when the network is in use
     if ( use_relative_low_load and readings.rx_load <= low_load_threshold )
-    or ( not use_relative_low_load and readings.down_utilisation <= min_download_speed ) then      -- ignore readings when the network is in use
+    or ( not use_relative_low_load and readings.down_utilisation <= min_download_speed ) then
         local download_delay = limit(ceil(readings.down_del_stat), min_allowed_threshold, max_allowed_threshold)
         for i = 1, number_of_histograms do
             local t = download_histogram[i]
