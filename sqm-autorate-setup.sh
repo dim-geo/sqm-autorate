@@ -4,7 +4,7 @@
 #   Copyright (C) 2022
 #       Nils Andreas Svee mailto:contact@lochnair.net (github @Lochnair)
 #       Daniel Lakeland mailto:dlakelan@street-artists.org (github @dlakelan)
-#       Mark Baker mailto:mark@e-bakers.com (github @Fail-Safe)
+#       Mark Baker mailto:mark@vpost.net (github @Fail-Safe)
 #       Charles Corrigan mailto:chas-iot@runegate.org (github @chas-iot)
 #
 #   This Source Code Form is subject to the terms of the Mozilla Public
@@ -24,17 +24,17 @@
 #   authorized under this License except under this disclaimer.
 #
 
-TS=$(date -u -Iminutes)      # to avoid identifying location by timezone
+TS=$(date -u -Iminutes) # to avoid identifying location by timezone
 
 if [ -z "$1" ]; then        # no parameters, use default repo and branch
     repo_root="https://raw.githubusercontent.com/dim-geo/sqm-autorate/develop/main"
     INSTALLATION="  [release]"
 
-elif [ -z "$2" ]; then      # one parameter, use specified branch in default repo
+elif [ -z "$2" ]; then # one parameter, use specified branch in default repo
     repo_root="https://raw.githubusercontent.com/sqm-autorate/sqm-autorate/${1}"
     INSTALLATION="\\\\n        branch ${1}\\\\n        ${TS}"
 
-else                        # two parameters, use specified repo and specified branch
+else # two parameters, use specified repo and specified branch
     repo_root="https://raw.githubusercontent.com/${1}/sqm-autorate/${2}"
     INSTALLATION="\\\\n        ${repo_root}\\\\n        ${TS}"
 
@@ -42,17 +42,18 @@ fi
 
 name="sqm-autorate"
 
-owrt_release_file="/etc/os-release"
+autorate_lib_path="/usr/lib/sqm-autorate"
 config_file="sqm-autorate.config"
-service_file="sqm-autorate.service"
-lua_file="sqm-autorate.lua"
+configure_file="configure.sh"
+delay_histogram_plugin="delay-histogram.lua"
 get_stats="getstats.sh"
+lua_file="sqm-autorate.lua"
+owrt_release_file="/etc/os-release"
 refl_icmp_file="reflectors-icmp.csv"
 refl_udp_file="reflectors-udp.csv"
-autorate_lib_path="/usr/lib/sqm-autorate"
+service_file="sqm-autorate.service"
 settings_file="sqma-settings.lua"
 utilities_file="sqma-utilities.lua"
-configure_file="configure.sh"
 
 is_openwrt=unknown
 if [ -f "$owrt_release_file" ]; then
@@ -73,8 +74,8 @@ if [ "${is_openwrt}" != "OpenWrt" ]; then
     fi
 fi
 
-if [ -x /etc/init.d/sqm-autorate ]; then
-    echo ">>> Stopping 'sqm-autorate'"
+if [ -x /etc/init.d/sqm-autorate ] && /etc/init.d/sqm-autorate running; then
+    echo ">>> Stopping $name"
     /etc/init.d/sqm-autorate stop
 fi
 
@@ -116,14 +117,17 @@ luarocks install vstruct
 
 [ -d "./.git" ] && is_git_proj=true || is_git_proj=false
 
-echo ">>> creating ${autorate_lib_path}"
+echo ">>> Creating ${autorate_lib_path}"
 mkdir -p "${autorate_lib_path}"
 
 if [ "$is_git_proj" = false ]; then
     # Need to wget some stuff down...
     echo ">>> Downloading sqm-autorate files..."
     (
-        cd "${autorate_lib_path}" || { echo "ERROR: could not find ${autorate_lib_path}"; exit; }
+        cd "${autorate_lib_path}" || {
+            echo "ERROR: could not find ${autorate_lib_path}"
+            exit
+        }
         $transfer "$config_file" "$repo_root/config/$config_file"
         $transfer "$service_file" "$repo_root/service/$service_file"
         $transfer "$lua_file" "$repo_root/lib/$lua_file"
@@ -133,6 +137,7 @@ if [ "$is_git_proj" = false ]; then
         $transfer "$refl_icmp_file" "$repo_root/lib/$refl_icmp_file"
         $transfer "$refl_udp_file" "$repo_root/lib/$refl_udp_file"
         $transfer "$configure_file" "$repo_root/lib/$configure_file"
+        $transfer "$delay_histogram_plugin" "$repo_root/lib/$delay_histogram_plugin"
     )
 fi
 
@@ -145,6 +150,7 @@ if [ "$is_git_proj" = true ]; then
     cp "./lib/$refl_icmp_file" "$autorate_lib_path/$refl_icmp_file"
     cp "./lib/$refl_udp_file" "$autorate_lib_path/$refl_udp_file"
     cp "./lib/$configure_file" "$autorate_lib_path/$configure_file"
+    cp "./lib/$delay_histogram_plugin" "$autorate_lib_path/$delay_histogram_plugin"
 fi
 
 echo ">>> Making $lua_file, $get_stats, and $configure_file executable..."
@@ -173,7 +179,6 @@ else
     mv "${autorate_lib_path}/$service_file" "/etc/init.d/$name"
 fi
 chmod a+x "/etc/init.d/$name"
-
 
 # transition section 1 - to be removed for release v0.6 or later
 if grep -q -e 'receive' -e 'transmit' "/etc/config/$name"; then
@@ -232,7 +237,7 @@ if grep -q -e 'receive' -e 'transmit' "/etc/config/$name"; then
     uci commit
 fi
 
-echo ">>> updating VERSION string to include: ${INSTALLATION}"
+echo ">>> Updating VERSION string to include: ${INSTALLATION}"
 sed -i-orig "/n    /! s;^\([[:blank:]]*local[[:blank:]]*_VERSION[[:blank:]]*=[[:blank:]]*\".*\)\"[[:blank:]]*$;\1${INSTALLATION}\";" "${autorate_lib_path}/${lua_file}"
 
 echo "

@@ -6,7 +6,7 @@
     Copyright (C) 2022
         Nils Andreas Svee mailto:contact@lochnair.net (github @Lochnair)
         Daniel Lakeland mailto:dlakelan@street-artists.org (github @dlakelan)
-        Mark Baker mailto:mark@e-bakers.com (github @Fail-Safe)
+        Mark Baker mailto:mark@vpost.net (github @Fail-Safe)
         Charles Corrigan mailto:chas-iot@runegate.org (github @chas-iot)
 
     This Source Code Form is subject to the terms of the Mozilla Public
@@ -32,6 +32,7 @@ function M.initialise(requires)
     return M
 end
 
+-- luacheck: ignore loglevel
 local loglevel = {
     TRACE = {
         level = 6,
@@ -90,7 +91,7 @@ function M.nsleep(s, ns)
 end
 
 local function get_current_time()
-    local time_s, time_ns = 0, 0
+    local time_s, time_ns
     local val1, val2 = time.clock_gettime(time.CLOCK_REALTIME)
     if type(val1) == "table" then
         time_s = val1.tv_sec

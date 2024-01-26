@@ -7,7 +7,7 @@
     Copyright (C) 2022
         Nils Andreas Svee mailto:contact@lochnair.net (github @Lochnair)
         Daniel Lakeland mailto:dlakelan@street-artists.org (github @dlakelan)
-        Mark Baker mailto:mark@e-bakers.com (github @Fail-Safe)
+        Mark Baker mailto:mark@vpost.net (github @Fail-Safe)
         Charles Corrigan mailto:chas-iot@runegate.org (github @chas-iot)
 
     This Source Code Form is subject to the terms of the Mozilla Public
@@ -33,9 +33,13 @@
 -- Initial sh implementation by @Lynx (OpenWrt forum)
 --
 -- ** Recommended style guide: https://github.com/luarocks/lua-style-guide **
---
+
+-- Global Luacheck Config
+-- luacheck: ignore set_debug_threadname
+
 -- The versioning value for this script
 local _VERSION = "0.5.1  [release]"
+local _VERSION = "0.5.2"
 
 local requires = {}
 
@@ -106,34 +110,31 @@ local maximum = utilities.maximum
 -- inject this one back into utilities
 utilities.is_module_available = is_module_available
 
--- are these needed ?
-local dec_to_hex = utilities.dec_to_hex
-local bnot = utilities.bnot
 
 ---------------------------- Begin Local Variables - Settings ----------------------------
 
 local settings = lanes.require("sqma-settings").initialise(requires, _VERSION)
 
-local ul_if = settings.ul_if                                -- upload interface
-local dl_if = settings.dl_if                                -- download interface
-local base_ul_rate = settings.base_ul_rate                  -- expected stable upload speed
-local base_dl_rate = settings.base_dl_rate                  -- expected stable download speed
-local min_ul_rate = settings.min_ul_rate                    -- minimum acceptable upload speed
-local min_dl_rate = settings.min_dl_rate                    -- minimum acceptable download speed
-local stats_file = settings.stats_file                      -- the file location of the output statisics
-local speedhist_file = settings.speedhist_file              -- the location of the output speed history
-local enable_verbose_baseline_output =                      -- additional verbosity     - retire or merge into TRACE?
-        settings.enable_verbose_baseline_output
-local tick_duration = settings.tick_duration                -- the interval between 'pings'
-local min_change_interval = settings.min_change_interval    -- the minimum interval between speed changes
-local reflector_list_icmp = settings.reflector_list_icmp    -- the location of the input icmp reflector list
-local reflector_list_udp = settings.reflector_list_udp      -- the location of the input udp reflector list
-local histsize = settings.histsize                          -- the number of good speed settings to remember
-local ul_max_delta_owd = settings.ul_max_delta_owd          -- the upload delay threshold to trigger an upload speed change
-local dl_max_delta_owd = settings.dl_max_delta_owd          -- the delay threshold to trigger a download speed change
-local high_load_level = settings.high_load_level            -- the relative load ratio (to current speed) that is considered 'high'
-local reflector_type = settings.reflector_type              -- reflector type icmp or udp (udp is not well supported)
-local output_statistics = settings.output_statistics        -- controls output to the statistics file
+local base_dl_rate = settings.base_dl_rate          -- expected stable download speed
+local base_ul_rate = settings.base_ul_rate          -- expected stable upload speed
+local dl_if = settings.dl_if                        -- download interface
+local dl_max_delta_owd = settings.dl_max_delta_owd  -- delay threshold to trigger a download speed change
+local enable_verbose_baseline_output =
+        settings.enable_verbose_baseline_output     -- additional verbosity     - retire or merge into TRACE?
+local high_load_level = settings.high_load_level    -- relative load ratio (to current speed) that is considered 'high'
+local histsize = settings.histsize                  -- number of good speed settings to remember
+local min_change_interval = settings.min_change_interval -- minimum interval between speed changes
+local min_dl_rate = settings.min_dl_rate            -- minimum acceptable download speed
+local min_ul_rate = settings.min_ul_rate            -- minimum acceptable upload speed
+local output_statistics = settings.output_statistics -- controls output to the statistics file
+local reflector_list_icmp = settings.reflector_list_icmp -- location of the input icmp reflector list
+local reflector_list_udp = settings.reflector_list_udp   -- location of the input udp reflector list
+local reflector_type = settings.reflector_type      -- reflector type icmp or udp (udp is not well supported)
+local speedhist_file = settings.speedhist_file      -- location of the output speed history
+local stats_file = settings.stats_file              -- file location of the output statisics
+local tick_duration = settings.tick_duration        -- interval between 'pings'
+local ul_if = settings.ul_if                        -- upload interface
+local ul_max_delta_owd = settings.ul_max_delta_owd  -- upload delay threshold to trigger an upload speed change
 
 print("Starting sqm-autorate.lua v" .. _VERSION)
 
@@ -245,14 +246,6 @@ local function load_reflector_list(file_path, ip_version)
     end
     return reflectors
 end
-
-local function baseline_reflector_list(tbl)
-    for _, v in ipairs(tbl) do
-        local rtt
-
-    end
-end
-
 
 local function update_cake_bandwidth(iface, rate_in_kbit)
     local is_changed = false
@@ -423,9 +416,9 @@ local function receive_udp_pkt(pkt_id)
             }
 
             logger(loglevel.DEBUG,
-                "Reflector IP: " .. stats.reflector .. "  |  Current time: " .. time_after_midnight_ms .. "  |  TX at: " ..
-                    stats.original_ts .. "  |  RTT: " .. stats.rtt .. "  |  UL time: " .. stats.uplink_time ..
-                    "  |  DL time: " .. stats.downlink_time)
+                "Reflector IP: " .. stats.reflector .. "  |  Current time: " .. time_after_midnight_ms ..
+                    "  |  TX at: " .. stats.original_ts .. "  |  RTT: " .. stats.rtt .. "  |  UL time: " ..
+                    stats.uplink_time .. "  |  DL time: " .. stats.downlink_time)
             logger(loglevel.TRACE, "Exiting receive_udp_pkt() with stats return")
 
             return stats
@@ -478,7 +471,7 @@ local function send_icmp_pkt(reflector, pkt_id)
     -- Create a raw ICMP timestamp request message
     local time_after_midnight_ms = get_time_after_midnight_ms()
     local ts_req = vstruct.write("> 2*u1 3*u2 3*u4", {13, 0, 0, pkt_id, 0, time_after_midnight_ms, 0, 0})
-    local ts_req = vstruct.write("> 2*u1 3*u2 3*u4",
+    ts_req = vstruct.write("> 2*u1 3*u2 3*u4",
         {13, 0, calculate_checksum(ts_req), pkt_id, 0, time_after_midnight_ms, 0, 0})
 
     -- Send ICMP TS request
@@ -513,10 +506,10 @@ local function send_udp_pkt(reflector, pkt_id)
     socket.setsockopt(sock, socket.SOL_SOCKET, socket.SO_BINDTODEVICE, ul_if)
 
     -- Create a raw ICMP timestamp request message
-    local time, time_ns = get_current_time()
-    local ts_req = vstruct.write("> 2*u1 3*u2 6*u4", {13, 0, 0, pkt_id, 0, time, time_ns, 0, 0, 0, 0})
-    local ts_req = vstruct.write("> 2*u1 3*u2 6*u4",
-        {13, 0, calculate_checksum(ts_req), pkt_id, 0, time, time_ns, 0, 0, 0, 0})
+    local time_s, time_ns = get_current_time()
+    local ts_req = vstruct.write("> 2*u1 3*u2 6*u4", {13, 0, 0, pkt_id, 0, time_s, time_ns, 0, 0, 0, 0})
+    ts_req = vstruct.write("> 2*u1 3*u2 6*u4",
+        {13, 0, calculate_checksum(ts_req), pkt_id, 0, time_s, time_ns, 0, 0, 0, 0})
 
     -- Send ICMP TS request
     local ok = socket.sendto(sock, ts_req, {
@@ -535,14 +528,8 @@ local function ts_ping_sender(pkt_type, pkt_id, freq)
     logger(loglevel.TRACE, "Entered ts_ping_sender() with values: " .. freq .. " | " .. pkt_type .. " | " .. pkt_id)
 
     local floor = math.floor
-
-    local reflector_tables = reflector_data:get("reflector_tables")
-    local reflector_list = reflector_tables["peers"]
-    local ff = (freq / #reflector_list)
-    local sleep_time_ns = floor((ff % 1) * 1e9)
-    local sleep_time_s = floor(ff)
-
     local ping_func = nil
+
     if pkt_type == "icmp" then
         ping_func = send_icmp_pkt
     elseif pkt_type == "udp" then
@@ -557,9 +544,9 @@ local function ts_ping_sender(pkt_type, pkt_id, freq)
 
         if reflector_list then
             -- Update sleep time based on number of peers
-            ff = (freq / #reflector_list)
-            sleep_time_ns = floor((ff % 1) * 1e9)
-            sleep_time_s = floor(ff)
+            local ff = (freq / #reflector_list)
+            local sleep_time_ns = floor((ff % 1) * 1e9)
+            local sleep_time_s = floor(ff)
 
             for _, reflector in ipairs(reflector_list) do
                 ping_func(reflector, pkt_id)
@@ -567,8 +554,6 @@ local function ts_ping_sender(pkt_type, pkt_id, freq)
             end
         end
     end
-
-    logger(loglevel.TRACE, "Exiting ts_ping_sender()")
 end
 
 local function read_stats_file(file)
@@ -591,7 +576,8 @@ local function ratecontrol()
     local sleep_time_ns = floor((min_change_interval % 1) * 1e9)
     local sleep_time_s = floor(min_change_interval)
 
-    local start_s, start_ns = get_current_time() -- first time we entered this loop, times will be relative to this seconds value to preserve precision
+    -- first time we entered this loop, times will be relative to this seconds value to preserve precision
+    local start_s, _ = get_current_time()
     local lastchg_s, lastchg_ns = get_current_time()
     local lastchg_t = lastchg_s - start_s + lastchg_ns / 1e9
     local lastdump_t = lastchg_t - 310
@@ -641,8 +627,6 @@ local function ratecontrol()
         local now_t = now_s + now_ns / 1e9
         if now_t - lastchg_t > min_change_interval then
             -- if it's been long enough, and the stats indicate needing to change speeds
-            -- change speeds here
-
             local owd_tables = owd_data:get("owd_tables")
             local owd_baseline = owd_tables["baseline"]
             local owd_recent = owd_tables["recent"]
@@ -667,7 +651,7 @@ local function ratecontrol()
                         owd_recent[reflector_ip].last_receive_time_s > now_abstime - 2 * tick_duration then
                         up_del[#up_del + 1] = owd_recent[reflector_ip].up_ewma - owd_baseline[reflector_ip].up_ewma
                         down_del[#down_del + 1] = owd_recent[reflector_ip].down_ewma -
-                                                      owd_baseline[reflector_ip].down_ewma
+                                                    owd_baseline[reflector_ip].down_ewma
 
                         logger(loglevel.DEBUG, "reflector: " .. reflector_ip .. " delay: " .. up_del[#up_del] ..
                             "  down_del: " .. down_del[#down_del])
@@ -693,10 +677,26 @@ local function ratecontrol()
                     end
 
                     rx_bytes_file = io.open(rx_bytes_path)
+                    if not rx_bytes_file then
+                        logger(loglevel.ERROR, "Could re-open download stats file: "..rx_bytes_path)
+                    end
+
                     tx_bytes_file = io.open(tx_bytes_path)
+                    if not tx_bytes_file then
+                        logger(loglevel.ERROR, "Could re-open upload stats file: "..tx_bytes_path)
+                    end
 
                     cur_rx_bytes = read_stats_file(rx_bytes_file)
+                    if not cur_rx_bytes then
+                        logger(loglevel.ERROR,
+                            "Could not read download stats file after re-open: "..rx_bytes_file)
+                    end
+
                     cur_tx_bytes = read_stats_file(tx_bytes_file)
+                    if not cur_tx_bytes then
+                        logger(loglevel.ERROR,
+                            "Could not read upload stats file after re-open: "..tx_bytes_file)
+                    end
 
                     next_ul_rate = cur_ul_rate
                     next_dl_rate = cur_dl_rate
@@ -713,7 +713,8 @@ local function ratecontrol()
                     if up_del_stat and down_del_stat then
                         -- TODO - find where the (8 / 1000) comes from and
                             -- i. convert to a pre-computed factor
-                            -- ii. ideally, see if it can be defined in terms of constants, eg ticks per second and number of active reflectors
+                            -- ii. ideally, see if it can be defined in terms of constants, eg ticks per
+                            --     second and number of active reflectors
                         down_utilisation = (8 / 1000) * (cur_rx_bytes - prev_rx_bytes) / (now_t - t_prev_bytes)
                         rx_load = down_utilisation / cur_dl_rate
                         up_utilisation = (8 / 1000) * (cur_tx_bytes - prev_tx_bytes) / (now_t - t_prev_bytes)
@@ -774,22 +775,26 @@ local function ratecontrol()
                             string_tbl[1] = "settings changed by plugin:"
                             tmp = results.ul_max_delta_owd
                             if tmp and tmp ~= ul_max_delta_owd then
-                                string_tbl[#string_tbl+1] = string.format("ul_max_delta_owd: %.1f -> %.1f", ul_max_delta_owd, tmp)
+                                string_tbl[#string_tbl+1] = string.format("ul_max_delta_owd: %.1f -> %.1f",
+                                    ul_max_delta_owd, tmp)
                                 ul_max_delta_owd = tmp
                             end
                             tmp = results.dl_max_delta_owd
                             if tmp and tmp ~= dl_max_delta_owd then
-                                string_tbl[#string_tbl+1] = string.format("dl_max_delta_owd: %.1f -> %.1f", dl_max_delta_owd, tmp)
+                                string_tbl[#string_tbl+1] = string.format("dl_max_delta_owd: %.1f -> %.1f",
+                                    dl_max_delta_owd, tmp)
                                 dl_max_delta_owd = tmp
                             end
                             tmp = results.next_ul_rate
                             if tmp and tmp ~= next_ul_rate then
-                                string_tbl[#string_tbl+1] = string.format("next_ul_rate: %.0f -> %.0f", next_ul_rate, tmp)
+                                string_tbl[#string_tbl+1] = string.format("next_ul_rate: %.0f -> %.0f",
+                                    next_ul_rate, tmp)
                                 next_ul_rate = tmp
                             end
                             tmp = results.next_dl_rate
                             if tmp and tmp ~= next_dl_rate then
-                                string_tbl[#string_tbl+1] = string.format("next_dl_rate: %.0f -> %.0f", next_dl_rate, tmp)
+                                string_tbl[#string_tbl+1] = string.format("next_dl_rate: %.0f -> %.0f",
+                                    next_dl_rate, tmp)
                                 next_dl_rate = tmp
                             end
                             if #string_tbl > 1 then
@@ -918,7 +923,8 @@ local function baseline_calculator()
 
             owd_baseline[time_data.reflector].last_receive_time_s = time_data.last_receive_time_s
             owd_recent[time_data.reflector].last_receive_time_s = time_data.last_receive_time_s
-            -- if this reflection is more than 5 seconds higher than baseline... mark it no good and trigger a reselection
+            -- if this reflection is more than 5 seconds higher than
+            -- baseline... mark it no good and trigger a reselection
             if time_data.uplink_time > owd_baseline[time_data.reflector].up_ewma + 5000 or time_data.downlink_time >
                 owd_baseline[time_data.reflector].down_ewma + 5000 then
                 -- 5000 ms is a weird amount of time for a ping. let's mark this old and no good
@@ -954,14 +960,14 @@ local function baseline_calculator()
                     local up_ewma = a_else_b(val.up_ewma, "?")
                     local down_ewma = a_else_b(val.down_ewma, "?")
                     logger(loglevel.DEBUG,
-                        "Reflector " .. ref .. " up baseline = " .. up_ewma .. " down baseline = " .. down_ewma)
+                        "Reflector " .. ref .. " up baseline = " .. up_ewma .. " | down baseline = " .. down_ewma)
                 end
 
                 for ref, val in pairs(owd_recent) do
                     local up_ewma = a_else_b(val.up_ewma, "?")
                     local down_ewma = a_else_b(val.down_ewma, "?")
-                    logger(loglevel.DEBUG, "Reflector " .. ref .. "recent up baseline = " .. up_ewma ..
-                        "recent down baseline = " .. down_ewma)
+                    logger(loglevel.DEBUG, "Reflector " .. ref .. " recent up baseline = " .. up_ewma ..
+                        " | recent down baseline = " .. down_ewma)
                 end
             end
         end
@@ -978,8 +984,10 @@ local function reflector_peer_selector()
     local pi = math.pi
     local random = math.random
 
+    -- we start out reselecting every 30 seconds, then after 40 reselections we move to
+    -- every `peer_reselection_time` mins
+    local selector_sleep_time_s = 30
     local selector_sleep_time_ns = 0
-    local selector_sleep_time_s = 30 -- we start out reselecting every 30 seconds, then after 40 reselections we move to every 15 mins
     local reselection_count = 0
     local baseline_sleep_time_ns = floor(((tick_duration * pi) % 1) * 1e9)
     local baseline_sleep_time_s = floor(tick_duration * pi)
@@ -991,23 +999,26 @@ local function reflector_peer_selector()
         reselector_channel:receive(selector_sleep_time_s + selector_sleep_time_ns / 1e9, "reselect")
         reselection_count = reselection_count + 1
         if reselection_count > 40 then
-            selector_sleep_time_s = 15 * 60 -- 15 mins
+            selector_sleep_time_s = peer_reselection_time * 60 -- Convert peer_reselection_time into mins
         end
+
         local peerhash = {} -- a hash table of next peers, to ensure uniqueness
         local next_peers = {} -- an array of next peers
         local reflector_tables = reflector_data:get("reflector_tables")
         local reflector_pool = reflector_tables["pool"]
-
-        for k, v in pairs(reflector_tables["peers"]) do -- include all current peers
+        for _, v in pairs(reflector_tables["peers"]) do -- include all current peers
             peerhash[v] = 1
         end
-        for i = 1, 20, 1 do -- add 20 at random, but
+
+        for _ = 1, 20, 1 do -- add 20 at random, but
             local nextcandidate = reflector_pool[random(#reflector_pool)]
             peerhash[nextcandidate] = 1
         end
-        for k, v in pairs(peerhash) do
+
+        for k, _ in pairs(peerhash) do
             next_peers[#next_peers + 1] = k
         end
+
         -- Put all the pool members back into the peers for some re-baselining...
         reflector_data:set("reflector_tables", {
             peers = next_peers,
@@ -1018,11 +1029,10 @@ local function reflector_peer_selector()
         nsleep(baseline_sleep_time_s, baseline_sleep_time_ns)
 
         local candidates = {}
-
         local owd_tables = owd_data:get("owd_tables")
         local owd_recent = owd_tables["recent"]
 
-        for i, peer in ipairs(next_peers) do
+        for _, peer in ipairs(next_peers) do
             if owd_recent[peer] then
                 local up_del = owd_recent[peer].up_ewma
                 local down_del = owd_recent[peer].down_ewma
@@ -1038,7 +1048,6 @@ local function reflector_peer_selector()
         table.sort(candidates, rtt_compare)
 
         -- Now we will just limit the candidates down to 2 * num_reflectors
-        local num_reflectors = num_reflectors
         local candidate_pool_num = 2 * num_reflectors
         if candidate_pool_num < #candidates then
             for i = candidate_pool_num + 1, #candidates, 1 do
@@ -1078,7 +1087,7 @@ local function conductor()
     logger(loglevel.TRACE, "Entered conductor()")
 
     -- Random seed
-    local nows, nowns = get_current_time()
+    local _, nowns = get_current_time()
     math.randomseed(nowns)
 
     logger(loglevel.DEBUG, "Upload iface: " .. ul_if .. " | Download iface: " .. dl_if)

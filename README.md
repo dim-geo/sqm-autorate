@@ -1,3 +1,5 @@
+[![Lua Check](https://github.com/sqm-autorate/sqm-autorate/actions/workflows/lua-analysis.yml/badge.svg)](https://github.com/sqm-autorate/sqm-autorate/actions/workflows/lua-analysis.yml)
+
 # CAKE with Adaptive Bandwidth - "sqm-autorate"
 
 ## About _sqm-autorate_
@@ -161,7 +163,7 @@ If you have some kind of DSL connection, read the
 
 3. Run the following command to run the setup script that downloads and installed the required files and packages:
    ```bash
-   sh -c "$(wget -q -O- https://raw.githubusercontent.com/sqm-autorate/sqm-autorate/testing/lua-threads/sqm-autorate-setup.sh)"
+   sh -c "$(wget -q -O- https://raw.githubusercontent.com/sqm-autorate/sqm-autorate/main/sqm-autorate-setup.sh)"
    ```
 
 4. If the setup script gives a warning about a configuration file `sqm-autorate-NEW`, use that file to replace `/etc/config/sqm-autorate` (first time installation only)
@@ -245,6 +247,7 @@ Values loaded from this configuration file override values supplied via the comm
 | output | stats_file | The location to which the autorate OWD reflector stats will be written. | '/tmp/sqm-autorate.csv' |
 | output | speed_hist_file | The location to which autorate speed adjustment history will be written. | '/tmp/sqm-speedhist.csv' |
 | output | suppress_statistics | Suppress the output of statistics. **Added in v0.5.0** | 'false' |
+| output | use_syslog | Defines if logging should be output into the system log (syslog). Set to '1' to enable. | '0' |
 | advanced_settings | speed_hist_size | The amount of "safe" speed history which the algorithm will maintain for reference during times of increased latency/congestion. Set too high, the algorithm will take days or weeks to stabilise. Set too low, the algorithm may not have enough good values to stabilise on.  | '100' |
 | advanced_settings | upload_delay_ms | The amount of delay that indicates bufferbloat for uploads. For high speed and relatively stable fiber connections, this can be reduced as low as 2. For LTE and DOCIS/cable connections, the default should be a reasonable starting point and may be increased. | '15' |
 | advanced_settings | download_delay_ms | As upload_delay_trigger but for downloads. | '15' |
@@ -352,6 +355,8 @@ All environment variables for this script have a prefix of `SQMA_`.
 
 The overall verbosity of the script can be adjusted via the `option log_level` in `/etc/config/sqm-autorate`,
 or the alternatives from the command line or from environment variables.
+
+Logs may be sent to the system log (syslog) by enabling the `use_syslog` option.
 
 The available values are one of the following, in order of decreasing overall verbosity:
 
@@ -504,6 +509,8 @@ See the [Verbosity](#Verbosity_Options) options for controlling the logging mess
 The script logs information to `/tmp/sqm-autorate.csv` and speed history data to `/tmp/sqm-speedhist.csv`.
 This may be stopped with the `suppress_statistics` option.
 
+Logs may be sent to the system log (syslog) by enabling the `use_syslog` option.
+
 ## Upgrading
 * [Manual Execution](#manual-execution)
 * [Upgrading](#upgrading)
@@ -517,7 +524,7 @@ The following shell commands will upgrade it to the latest version
    ```
 2. Run the setup script
    ```bash
-   sh -c "$(wget -q -O- https://raw.githubusercontent.com/sqm-autorate/sqm-autorate/testing/lua-threads/sqm-autorate-setup.sh)"
+   sh -c "$(wget -q -O- https://raw.githubusercontent.com/sqm-autorate/sqm-autorate/main/sqm-autorate-setup.sh)"
    ```
 3. Start the service
    ```bash
@@ -533,7 +540,7 @@ _(We hope that you will never need to uninstall this autorate program, but if yo
 Run the following removal script to remove the operational files:
 
 ```bash
-sh -c "$(wget -q -O- https://raw.githubusercontent.com/sqm-autorate/sqm-autorate/testing/lua-threads/sqm-autorate-remove.sh)"
+sh -c "$(wget -q -O- https://raw.githubusercontent.com/sqm-autorate/sqm-autorate/main/sqm-autorate-remove.sh)"
 ```
 
 ## Development
@@ -559,7 +566,7 @@ and some shell scripting.
 The primary development git branch is [develop/main](../../../tree/develop/main),
 with bug fixes and features developed in feature branches before review and merging.
 
-Periodic releases are performed in the [testing/lua-threads](../../../tree/testing/lua-threads) branch.
+Periodic releases are performed in the [main](../../../tree/main) branch.
 
 ### _sqm-autorate.lua_
 _sqm-autorate.lua_ is a Lua implementation of an SQM auto-rate algorithm and it employs multiple [preemptive] threads to perform the following high-level actions in parallel:
