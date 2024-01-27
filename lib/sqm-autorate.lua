@@ -14,7 +14,6 @@
     License, v. 2.0. If a copy of the MPL was not distributed with this
     file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-
     Covered Software is provided under this License on an "as is"
     basis, without warranty of any kind, either expressed, implied, or
     statutory, including, without limitation, warranties that the
@@ -26,129 +25,34 @@
     repair, or correction. This disclaimer of warranty constitutes an
     essential part of this License. No use of any Covered Software is
     authorized under this License except under this disclaimer.
-
-]] --
---
--- Inspired by @moeller0 (OpenWrt forum)
--- Initial sh implementation by @Lynx (OpenWrt forum)
+]]
 --
 -- ** Recommended style guide: https://github.com/luarocks/lua-style-guide **
-
--- Global Luacheck Config
--- luacheck: ignore set_debug_threadname
-
+--
 -- The versioning value for this script
-local _VERSION = "0.5.2"
+local _VERSION = "0.5.3"
+--
 
 local requires = {}
 
-local lanes = require"lanes".configure()
+-- Something about luci / uci modules seems to introduce non thread-safe full userdata.
+-- As our only interaction with luci/uci is to lookup settings from the sqm-autorate
+-- config, this is not a breaking issue. We must disable (read: demote) full userdata
+-- to acknowledge and move past this issue, else lanes will not work.
+local lanes = require "lanes".configure({ demote_full_userdata = true })
 requires.lanes = lanes
+
+local util = lanes.require "utility"
+requires.util = util
+
+-- Try to load argparse if it's installed
+if util.is_module_available("argparse") then
+    local argparse = lanes.require "argparse"
+    requires.argparse = argparse
+end
 
 local math = lanes.require "math"
 requires.math = math
-
-local posix = lanes.require "posix"
-requires.posix = posix
-
-local socket = lanes.require "posix.sys.socket"
-requires.socket = socket
-
-local time = lanes.require "posix.time"
-requires.time = time
-
-local vstruct = lanes.require "vstruct"
-requires.vstruct = vstruct
---
--- Found this clever function here: https://stackoverflow.com/a/15434737
--- This function will assist in compatibility given differences between OpenWrt, Turris OS, etc.
-local function is_module_available(name)
-    if package.loaded[name] then
-        return true
-    else
-        for _, searcher in ipairs(package.searchers or package.loaders) do
-            local loader = searcher(name)
-            if type(loader) == 'function' then
-                package.preload[name] = loader
-                return true
-            end
-        end
-        return false
-    end
-end
-
-local bit = nil
-local bit_mod = nil
-if is_module_available("bit") then
-  bit = lanes.require "bit"
-  bit_mod = "bit"
-elseif is_module_available("bit32") then
-  bit = lanes.require "bit32"
-  bit_mod = "bit32"
-else
-  print "FATAL: No bitwise module found"
-  os.exit(1, true)
-end
-requires.bit = bit
-requires.bit_mod = bit_mod
-
-local utilities = lanes.require("sqma-utilities").initialise(requires)
-requires.utilities = utilities
-
-local loglevel = utilities.loglevel
-local logger = utilities.logger
-local nsleep = utilities.nsleep
-local get_current_time = utilities.get_current_time
-local get_time_after_midnight_ms = utilities.get_time_after_midnight_ms
-local calculate_checksum = utilities.calculate_checksum
-local a_else_b = utilities.a_else_b
-local get_table_position = utilities.get_table_position
-local shuffle_table = utilities.shuffle_table
-local maximum = utilities.maximum
-
--- inject this one back into utilities
-utilities.is_module_available = is_module_available
-
-
----------------------------- Begin Local Variables - Settings ----------------------------
-
-local settings = lanes.require("sqma-settings").initialise(requires, _VERSION)
-
-local base_dl_rate = settings.base_dl_rate          -- expected stable download speed
-local base_ul_rate = settings.base_ul_rate          -- expected stable upload speed
-local dl_if = settings.dl_if                        -- download interface
-local dl_max_delta_owd = settings.dl_max_delta_owd  -- delay threshold to trigger a download speed change
-local enable_verbose_baseline_output =
-        settings.enable_verbose_baseline_output     -- additional verbosity     - retire or merge into TRACE?
-local high_load_level = settings.high_load_level    -- relative load ratio (to current speed) that is considered 'high'
-local histsize = settings.histsize                  -- number of good speed settings to remember
-local min_change_interval = settings.min_change_interval -- minimum interval between speed changes
-local min_dl_rate = settings.min_dl_rate            -- minimum acceptable download speed
-local min_ul_rate = settings.min_ul_rate            -- minimum acceptable upload speed
-local output_statistics = settings.output_statistics -- controls output to the statistics file
-local reflector_list_icmp = settings.reflector_list_icmp -- location of the input icmp reflector list
-local reflector_list_udp = settings.reflector_list_udp   -- location of the input udp reflector list
-local reflector_type = settings.reflector_type      -- reflector type icmp or udp (udp is not well supported)
-local speedhist_file = settings.speedhist_file      -- location of the output speed history
-local stats_file = settings.stats_file              -- file location of the output statisics
-local tick_duration = settings.tick_duration        -- interval between 'pings'
-local ul_if = settings.ul_if                        -- upload interface
-local ul_max_delta_owd = settings.ul_max_delta_owd  -- upload delay threshold to trigger an upload speed change
-
-print("Starting sqm-autorate.lua v" .. _VERSION)
-
-local plugin_ratecontrol = nil
-if settings.plugin_ratecontrol then
-    if is_module_available(settings.plugin_ratecontrol) then
-        logger(loglevel.WARN, "Loading plugin: " .. tostring(settings.plugin_ratecontrol))
-        plugin_ratecontrol = lanes.require(settings.plugin_ratecontrol).initialise(requires, settings)
-        requires.plugin_ratecontrol = plugin_ratecontrol
-    else
-        logger(loglevel.ERROR, "Could not find configured plugin: " .. tostring(settings.plugin_ratecontrol))
-    end
-end
-
----------------------------- Begin Internal Local Variables ----------------------------
 
 -- The stats_queue is intended to be a true FIFO queue.
 -- The purpose of the queue is to hold the processed timestamp packets that are
@@ -175,6 +79,9 @@ reflector_data:set("reflector_tables", {
     pool = {}
 })
 
+-- The reselector_channel is intended to be used as a signal to force reselction of peers
+-- when there is anomalous behavior with current (in-use) reflectors. This may be due to
+-- a reflector going unresponsive, for example.
 local reselector_channel = lanes.linda()
 
 local cur_process_id = posix.getpid()
@@ -1080,136 +987,75 @@ local function reflector_peer_selector()
     end
 end
 ---------------------------- End Local Functions ----------------------------
+-- The signal_to_ratecontrol is intended to be used by the ratecontroller thread
+-- to wait on a signal from the baseliner thread that new data is available as they come in,
+-- for ratecontrol algorithms that really getting the data as soon as it's ready
+local signal_to_ratecontrol = lanes.linda()
 
 ---------------------------- Begin Conductor ----------------------------
 local function conductor()
-    logger(loglevel.TRACE, "Entered conductor()")
+    util.logger(util.loglevel.TRACE, "Entered conductor()")
+    util.logger(util.loglevel.INFO, "Starting sqm-autorate.lua v" .. _VERSION)
 
-    -- Random seed
-    local _, nowns = get_current_time()
-    math.randomseed(nowns)
+    local settings = lanes.require("settings").initialise(requires, _VERSION, reflector_data)
 
-    logger(loglevel.DEBUG, "Upload iface: " .. ul_if .. " | Download iface: " .. dl_if)
-
-    -- Verify these are correct using "cat /sys/class/..."
-    if dl_if:find("^ifb.+") or dl_if:find("^veth.+") then
-        rx_bytes_path = "/sys/class/net/" .. dl_if .. "/statistics/tx_bytes"
-    elseif dl_if == "br-lan" then
-        rx_bytes_path = "/sys/class/net/" .. ul_if .. "/statistics/rx_bytes"
-    else
-        rx_bytes_path = "/sys/class/net/" .. dl_if .. "/statistics/rx_bytes"
-    end
-
-    if ul_if:find("^ifb.+") or ul_if:find("^veth.+") then
-        tx_bytes_path = "/sys/class/net/" .. ul_if .. "/statistics/rx_bytes"
-    else
-        tx_bytes_path = "/sys/class/net/" .. ul_if .. "/statistics/tx_bytes"
-    end
-
-    logger(loglevel.DEBUG, "rx_bytes_path: " .. rx_bytes_path)
-    logger(loglevel.DEBUG, "tx_bytes_path: " .. tx_bytes_path)
-
-    -- Test for existent stats files
-    local test_file = io.open(rx_bytes_path)
-    if not test_file then
-        -- Let's wait and retry a few times before failing hard. These files typically
-        -- take some time to be generated following a reboot.
-        local retries = 12
-        local retry_time = 5 -- secs
-        for i = 1, retries, 1 do
-            logger(loglevel.WARN,
-                "Rx stats file not yet available. Will retry again in " .. retry_time .. " seconds. (Attempt " .. i ..
-                    " of " .. retries .. ")")
-            nsleep(retry_time, 0)
-            test_file = io.open(rx_bytes_path)
-            if test_file then
-                break
-            end
-        end
-
-        if not test_file then
-            logger(loglevel.FATAL, "Could not open stats file: " .. rx_bytes_path)
-            os.exit(1, true)
-        end
-    end
-    test_file:close()
-    logger(loglevel.DEBUG, "Download device stats file found! Continuing...")
-
-    test_file = io.open(tx_bytes_path)
-    if not test_file then
-        -- Let's wait and retry a few times before failing hard. These files typically
-        -- take some time to be generated following a reboot.
-        local retries = 12
-        local retry_time = 5 -- secs
-        for i = 1, retries, 1 do
-            logger(loglevel.WARN,
-                "Tx stats file not yet available. Will retry again in " .. retry_time .. " seconds. (Attempt " .. i ..
-                    " of " .. retries .. ")")
-            nsleep(retry_time, 0)
-            test_file = io.open(tx_bytes_path)
-            if test_file then
-                break
-            end
-        end
-
-        if not test_file then
-            logger(loglevel.FATAL, "Could not open stats file: " .. tx_bytes_path)
-            os.exit(1, true)
-        end
-    end
-    test_file:close()
-    logger(loglevel.DEBUG, "Upload device stats file found! Continuing...")
-
-    -- Load up the reflectors temp table
-    local tmp_reflectors = {}
-    if reflector_type == "icmp" then
-        tmp_reflectors = load_reflector_list(reflector_list_icmp, "4")
-    elseif reflector_type == "udp" then
-        tmp_reflectors = load_reflector_list(reflector_list_udp, "4")
-    else
-        logger(loglevel.FATAL, "Unknown reflector type specified: " .. reflector_type)
+    if settings.sqm_enabled == 0 then
+        util.logger(util.loglevel.FATAL,
+            "SQM is not enabled on this OpenWrt system. Please enable it before starting sqm-autorate.")
         os.exit(1, true)
     end
 
-    logger(loglevel.DEBUG, "Reflector Pool Size: " .. #tmp_reflectors)
+    local reflector_tables = reflector_data:get("reflector_tables")
+    local reflector_pool = reflector_tables["pool"]
+    util.logger(util.loglevel.INFO, "Reflector Pool Size: " .. #reflector_pool)
 
-    -- Load up the reflectors shared tables
-    -- seed the peers with a set of "good candidates", we will adjust using the peer selector through time
-    reflector_data:set("reflector_tables", {
-        peers = {"9.9.9.9", "8.238.120.14", "74.82.42.42", "194.242.2.2", "208.67.222.222", "94.140.14.14"},
-        pool = tmp_reflectors
-    })
+    if settings.plugin_ratecontrol then
+        util.logger(util.loglevel.INFO, "Loaded ratecontrol plugin: " .. settings.plugin_ratecontrol.name)
+    end
 
-    -- Set a packet ID
-    local packet_id = cur_process_id + 32768
+    -- Random seed
+    local _, now_ns = util.get_current_time()
+    math.randomseed(now_ns)
 
-    -- Set initial TC values to minimum
-    -- so there should be no initial bufferbloat to
-    -- fool the baseliner
-    update_cake_bandwidth(dl_if, min_dl_rate)
-    update_cake_bandwidth(ul_if, min_ul_rate)
-    nsleep(0, 5e8)
+    -- load external modules so lanes can find them
+    lanes.require "_bit"
+    lanes.require "posix"
+    lanes.require "posix.sys.socket"
+    lanes.require "posix.time"
+    lanes.require "vstruct"
+    lanes.require "luci.jsonc"
+    lanes.require "lucihttp"
+    lanes.require "ubus"
 
-    local threads = {
-        receiver = lanes.gen("*", {
-            required = {bit_mod, "posix.sys.socket", "posix.time", "vstruct"}
-        }, ts_ping_receiver)(packet_id, reflector_type),
-        baseliner = lanes.gen("*", {
-            required = {"posix", "posix.time"}
-        }, baseline_calculator)(),
-        pinger = lanes.gen("*", {
-            required = {bit_mod, "posix.sys.socket", "posix.time", "vstruct"}
-        }, ts_ping_sender)(reflector_type, packet_id, tick_duration),
-        selector = lanes.gen("*", {
-            required = {"posix", "posix.time"}
-        }, reflector_peer_selector)()
-    }
+    -- load all internal modules
+    local baseliner_mod = lanes.require 'baseliner'
+        .configure(settings, owd_data, stats_queue, reselector_channel, signal_to_ratecontrol)
+    local pinger_mod = lanes.require 'pinger'
+        .configure(settings, reflector_data, stats_queue)
+    local ratecontroller_mod = lanes.require('ratecontroller_' .. settings.ratecontroller)
+        .configure(settings, owd_data, reflector_data, reselector_channel, signal_to_ratecontrol)
+    local reflector_selector_mod = lanes.require 'reflector_selector'
+        .configure(settings, owd_data, reflector_data, reselector_channel)
 
-    nsleep(10, 0) -- sleep 10 seconds before we start adjusting speeds
+    local threads = {}
+    threads["receiver"] = lanes.gen("*", {
+        required = { "_bit", "posix.sys.socket", "posix.time", "vstruct", "luci.jsonc", "lucihttp", "ubus" }
+    }, pinger_mod.receiver)()
+    threads["baseliner"] = lanes.gen("*", {
+        required = { "posix", "posix.time", "luci.jsonc", "lucihttp", "ubus" }
+    }, baseliner_mod.baseline_calculator)()
+    threads["pinger"] = lanes.gen("*", {
+        required = { "_bit", "posix.sys.socket", "posix.time", "vstruct", "luci.jsonc", "lucihttp", "ubus" }
+    }, pinger_mod.sender)()
+    threads["selector"] = lanes.gen("*", {
+        required = { "posix", "posix.time", "luci.jsonc", "lucihttp", "ubus" }
+    }, reflector_selector_mod.reflector_peer_selector)()
 
+    -- -- Wait 10 secs to allow the other threads to stabilize before starting the regulator
+    -- util.nsleep(10, 0)
     threads["regulator"] = lanes.gen("*", {
-        required = {"posix", "posix.time"}
-    }, ratecontrol)()
+        required = { "posix", "posix.time", "luci.jsonc", "lucihttp", "ubus" }
+    }, ratecontroller_mod.ratecontrol)()
 
     -- Start this whole thing in motion!
     local join_timeout = 0.5
@@ -1218,8 +1064,8 @@ local function conductor()
             local _, err = thread:join(join_timeout)
 
             if err and err ~= "timeout" then
-                print('Something went wrong in the ' .. name .. ' thread')
-                print(err)
+                util.logger(util.loglevel.FATAL, 'Something went wrong in the ' .. name .. ' thread')
+                util.logger(util.loglevel.FATAL, err)
                 os.exit(1, true)
             end
         end
@@ -1227,4 +1073,4 @@ local function conductor()
 end
 ---------------------------- End Conductor Loop ----------------------------
 
-conductor() -- go!
+conductor() -- Begin main loop. Go!
