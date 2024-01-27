@@ -35,50 +35,57 @@ end
 local function update_cake_bandwidth(iface, rate_in_kbit)
     local is_changed = false
     rate_in_kbit = math.floor(rate_in_kbit)
-    local duration = math.ceil(5*1500*8/rate_in_kbit)
-    if (duration < 25) then
-        duration=25
-    end
     local gamerate = math.floor(rate_in_kbit*0.15+400)
     local gameburst = 10 * gamerate
     if (gameburst > 0.97 * rate_in_kbit) then
         gameburst = math.floor(0.97 * rate_in_kbit)
     end
     if (iface == settings.dl_if and rate_in_kbit >= settings.min_dl_rate) then
+       local duration = 25
+
         os.execute(string.format("tc class change dev %s parent 1: classid 1:1 hfsc ls m2 %dkbit ul m2 %dkbit", iface, rate_in_kbit, rate_in_kbit ))
         os.execute(string.format("tc class change dev %s parent 1:1 classid 1:11 hfsc rt m1 %dkbit d %dms m2 %dkbit", iface, gameburst, duration, gamerate ))
-        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:12 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.7*rate_in_kbit), duration, math.floor(0.59*rate_in_kbit) ))
-        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:13 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.2*rate_in_kbit), duration, math.floor(0.15*rate_in_kbit) ))
-        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:14 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.07*rate_in_kbit), duration, math.floor(0.04*rate_in_kbit) ))
-        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:15 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.03*rate_in_kbit), duration, math.floor(0.01*rate_in_kbit) ))
+        -- os.execute(string.format("tc class change dev %s parent 1:1 classid 1:12 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.7*rate_in_kbit), duration, math.floor(0.5*rate_in_kbit) ))
+        -- os.execute(string.format("tc class change dev %s parent 1:1 classid 1:13 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.3*rate_in_kbit), duration, math.floor(0.19*rate_in_kbit) ))
+        -- os.execute(string.format("tc class change dev %s parent 1:1 classid 1:14 hfsc ls m2 %dkbit", iface, math.floor(0.027*rate_in_kbit) ))
+        -- os.execute(string.format("tc class change dev %s parent 1:1 classid 1:15 hfsc ls m2 %dkbit", iface, math.floor(0.01*rate_in_kbit) ))
+        -- os.execute(string.format("tc class change dev %s parent 1:1 classid 1:16 hfsc ls m2 %dkbit", iface, math.floor(0.07*rate_in_kbit) ))
 
-        local intvl=math.floor(100+(2*1500*8/rate_in_kbit))
-        local targ=math.floor(540*8/rate_in_kbit+4)
-        local memory_limit=rate_in_kbit*25
+        local intvl=math.floor(100+(2.5*1500*8/rate_in_kbit))
+        local memory_limit=4*rate_in_kbit*25
 
-        os.execute(string.format("tc qdisc change dev %s parent 1:12 fq_codel memory_limit %d interval %dms target %dms quantum 2984", iface, memory_limit, intvl, targ))
-        os.execute(string.format("tc qdisc change dev %s parent 1:13 fq_codel memory_limit %d interval %dms target %dms quantum 2984", iface, memory_limit, intvl, targ))
-        os.execute(string.format("tc qdisc change dev %s parent 1:14 fq_codel memory_limit %d interval %dms target %dms quantum 2984", iface, memory_limit, intvl, targ))
-        os.execute(string.format("tc qdisc change dev %s parent 1:15 fq_codel memory_limit %d interval %dms target %dms quantum 2984", iface, memory_limit, intvl, targ))
-
+        os.execute(string.format("tc qdisc change dev %s parent 1:11 cake besteffort nat ingress memlimit %d rtt %dms", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:12 cake besteffort nat ingress memlimit %d rtt %dms", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:13 cake besteffort nat ingress memlimit %d rtt %dms", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:14 cake besteffort nat ingress memlimit %d rtt %dms", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:15 cake besteffort nat ingress memlimit %d rtt %dms", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:16 cake besteffort nat ingress memlimit %d rtt %dms", iface, memory_limit, intvl))
         is_changed = true
     end
     if (iface == settings.ul_if and rate_in_kbit >= settings.min_ul_rate) then
+        local duration = math.ceil(5*1500*8/rate_in_kbit)
+        if (duration < 25) then
+            duration=25
+        end
+
         os.execute(string.format("tc class change dev %s parent 1: classid 1:1 hfsc ls m2 %dkbit ul m2 %dkbit", iface, rate_in_kbit, rate_in_kbit ))
         os.execute(string.format("tc class change dev %s parent 1:1 classid 1:11 hfsc rt m1 %dkbit d %dms m2 %dkbit", iface, gameburst, duration, gamerate ))
-        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:12 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.7*rate_in_kbit), duration, math.floor(0.59*rate_in_kbit) ))
-        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:13 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.2*rate_in_kbit), duration, math.floor(0.15*rate_in_kbit) ))
-        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:14 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.07*rate_in_kbit), duration, math.floor(0.04*rate_in_kbit) ))
-        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:15 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.03*rate_in_kbit), duration, math.floor(0.01*rate_in_kbit) ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:12 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.7*rate_in_kbit), duration, math.floor(0.5*rate_in_kbit) ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:13 hfsc ls m1 %dkbit d %dms m2 %dkbit", iface, math.floor(0.3*rate_in_kbit), duration, math.floor(0.19*rate_in_kbit) ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:14 hfsc ls m2 %dkbit", iface, math.floor(0.027*rate_in_kbit) ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:15 hfsc ls m2 %dkbit", iface, math.floor(0.01*rate_in_kbit) ))
+        os.execute(string.format("tc class change dev %s parent 1:1 classid 1:16 hfsc ls m2 %dkbit", iface, math.floor(0.07*rate_in_kbit) ))
 
-        local intvl=math.floor(100+(2*1500*8/rate_in_kbit))
-        local targ=math.floor(540*8/rate_in_kbit+4)
-        -- local memory_limit=rate_in_kbit*25
+        local intvl=math.floor(100+(1.5*560*8/rate_in_kbit))
+        -- local targ=math.floor(540*8/rate_in_kbit+4)
+        local memory_limit=128*rate_in_kbit*25
 
-        os.execute(string.format("tc qdisc change dev %s parent 1:12 fq_codel interval %dms target %dms quantum 2984", iface, intvl, targ))
-        os.execute(string.format("tc qdisc change dev %s parent 1:13 fq_codel interval %dms target %dms quantum 2984", iface, intvl, targ))
-        os.execute(string.format("tc qdisc change dev %s parent 1:14 fq_codel interval %dms target %dms quantum 2984", iface, intvl, targ))
-        os.execute(string.format("tc qdisc change dev %s parent 1:15 fq_codel interval %dms target %dms quantum 2984", iface, intvl, targ))
+        os.execute(string.format("tc qdisc change dev %s parent 1:11 cake memlimit %d rtt %dms nat besteffort no-ack-filter", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:12 cake memlimit %d rtt %dms nat besteffort ack-filter", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:13 cake memlimit %d rtt %dms nat besteffort ack-filter", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:14 cake memlimit %d rtt %dms nat besteffort ack-filter", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:15 cake memlimit %d rtt %dms nat besteffort ack-filter", iface, memory_limit, intvl))
+        os.execute(string.format("tc qdisc change dev %s parent 1:16 cake memlimit %d rtt %dms nat besteffort ack-filter", iface, memory_limit, intvl))
 
         is_changed = true
     end

@@ -1,5 +1,5 @@
 --[[
-    delay-histogram.lua: Automatically tune the delay threshold using a
+    delay-histogram-tm.lua: Automatically tune the delay threshold using a
         histogram and smooth out major speed resets
 
     Copyright (C) 2022
@@ -104,7 +104,7 @@ config delay_histogram
 --==--==--==-- begin public interface --==--==--==--
 local M = {}
 
-M.name = 'delay-histogram'
+M.name = 'delay-histogram-tm'
 
 -- function process(readings)
 --  parameters
@@ -340,10 +340,25 @@ local function calculate_thresholds(histogram_no, print_it, now)
             -- find the cut-off point
             local target = total * cumulative_cutoff
             local count = 0
+            local sum = 0
             for j = min_allowed_threshold, max_allowed_threshold do
+                -- logger(loglevel.INFO, "delay j" )
+                -- logger(loglevel.INFO, j )
                 count = count + histogram[j]
-                if count >= target then
-                    result = j
+                if count < target then
+                    sum = sum + (j * histogram[j])
+                else
+                    count = count - histogram[j]
+                    if count == 0 then
+                        result = j
+                    else
+                        logger(loglevel.INFO, "delay sum" )
+                        logger(loglevel.INFO, sum )
+                        logger(loglevel.INFO, "delay count" )
+                        logger(loglevel.INFO, count )
+                        result = ceil(sum/count)
+                        logger(loglevel.INFO, result )
+                    end
                     break
                 end
             end
@@ -509,6 +524,17 @@ function M.process(readings)
 
         upload_result_prev = results.ul_max_delta_owd
         download_result_prev = results.dl_max_delta_owd
+    end
+
+    if not speed_reset then
+        if (readings.down_del_stat < download_result_prev)
+        and (readings.cur_dl_rate == readings.next_dl_rate)
+        and ( 2 * readings.rx_load <= high_load_level )
+        and (readings.cur_dl_rate < base_dl_rate ) then
+          results.next_dl_rate = ceil(readings.cur_dl_rate * (1 + .1 * max(0, (1 - readings.cur_dl_rate / base_dl_rate))) + (base_dl_rate * 0.03))
+          logger(loglevel.INFO, "idling increase" )
+          logger(loglevel.INFO, results.next_dl_rate )
+        end
     end
 
     return results
