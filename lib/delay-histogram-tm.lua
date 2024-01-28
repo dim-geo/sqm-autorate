@@ -525,7 +525,7 @@ function M.process(readings)
         upload_result_prev = results.ul_max_delta_owd
         download_result_prev = results.dl_max_delta_owd
     end
-
+--[[
     if not speed_reset then
         if (readings.down_del_stat < download_result_prev)
         and (readings.cur_dl_rate == readings.next_dl_rate)
@@ -536,7 +536,7 @@ function M.process(readings)
           logger(loglevel.INFO, results.next_dl_rate )
         end
     end
-
+]]
     return results
 end
 
