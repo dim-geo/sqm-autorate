@@ -118,18 +118,18 @@ local function update_cake_bandwidth(iface, rate_in_kbit)
         -- local targ=math.floor(540*8/rate_in_kbit+4)
         local memory_limit=128*rate_in_kbit*25
 
-        os.execute(string.format("tc qdisc change dev %s parent 1:11 cake memlimit %d rtt %dms nat besteffort no-ack-filter",
-            iface, memory_limit, intvl))
-        os.execute(string.format("tc qdisc change dev %s parent 1:12 cake memlimit %d rtt %dms nat besteffort ack-filter",
-            iface, memory_limit, intvl))
-        os.execute(string.format("tc qdisc change dev %s parent 1:13 cake memlimit %d rtt %dms nat besteffort ack-filter",
-            iface, memory_limit, intvl))
-        os.execute(string.format("tc qdisc change dev %s parent 1:14 cake memlimit %d rtt %dms nat besteffort ack-filter",
-            iface, memory_limit, intvl))
-        os.execute(string.format("tc qdisc change dev %s parent 1:15 cake memlimit %d rtt %dms nat besteffort ack-filter",
-            iface, memory_limit, intvl))
-        os.execute(string.format("tc qdisc change dev %s parent 1:16 cake memlimit %d rtt %dms nat besteffort ack-filter",
-            iface, memory_limit, intvl))
+        local command="tc qdisc change dev %s parent 1:11 cake memlimit %d rtt %dms nat besteffort no-ack-filter"
+        os.execute(string.format(command, iface, memory_limit, intvl))
+        command = "tc qdisc change dev %s parent 1:12 cake memlimit %d rtt %dms nat besteffort ack-filter"
+        os.execute(string.format(command, iface, memory_limit, intvl))
+        command = "tc qdisc change dev %s parent 1:13 cake memlimit %d rtt %dms nat besteffort ack-filter"
+        os.execute(string.format(command, iface, memory_limit, intvl))
+        command = "tc qdisc change dev %s parent 1:14 cake memlimit %d rtt %dms nat besteffort ack-filter"
+        os.execute(string.format(command, iface, memory_limit, intvl))
+        command = "tc qdisc change dev %s parent 1:15 cake memlimit %d rtt %dms nat besteffort ack-filter"
+        os.execute(string.format(command, iface, memory_limit, intvl))
+        command = "tc qdisc change dev %s parent 1:16 cake memlimit %d rtt %dms nat besteffort ack-filter"
+        os.execute(string.format(command, iface, memory_limit, intvl))
 
         is_changed = true
     end

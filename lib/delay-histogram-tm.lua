@@ -531,7 +531,8 @@ function M.process(readings)
         and (readings.cur_dl_rate == readings.next_dl_rate)
         and ( 2 * readings.rx_load <= high_load_level )
         and (readings.cur_dl_rate < base_dl_rate ) then
-          results.next_dl_rate = ceil(readings.cur_dl_rate * (1 + .1 * max(0, (1 - readings.cur_dl_rate / base_dl_rate))) + (base_dl_rate * 0.03))
+          results.next_dl_rate = ceil(readings.cur_dl_rate * (1 + .1 * max(0,
+            (1 - readings.cur_dl_rate / base_dl_rate))) + (base_dl_rate * 0.03))
           logger(loglevel.INFO, "idling increase" )
           logger(loglevel.INFO, results.next_dl_rate )
         end
