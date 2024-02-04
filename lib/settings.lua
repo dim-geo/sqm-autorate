@@ -405,7 +405,7 @@ function M.initialise(requires, version, arg_reflector_data)
 
     M.tick_duration = 0.5       -- Frequency in seconds
     M.min_change_interval = 0.5 -- don't change speeds unless this many seconds has passed since last change
-    M.ratecontroller = 'ewma'
+    M.ratecontroller = 'ewma_hfsc'
 
     M.reflector_list_icmp = "/usr/lib/sqm-autorate/reflectors-icmp.csv"
     M.reflector_list_udp = "/usr/lib/sqm-autorate/reflectors-udp.csv"

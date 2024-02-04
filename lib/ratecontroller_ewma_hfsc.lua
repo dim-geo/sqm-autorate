@@ -106,9 +106,9 @@ local function update_cake_bandwidth(iface, rate_in_kbit)
         os.execute(string.format("tc class change dev %s parent 1:1 classid 1:12 hfsc ls m1 %dkbit d %dms m2 %dkbit",
             iface, math.floor(0.7*rate_in_kbit), duration, math.floor(0.5*rate_in_kbit) ))
         os.execute(string.format("tc class change dev %s parent 1:1 classid 1:13 hfsc ls m1 %dkbit d %dms m2 %dkbit",
-            iface, math.floor(0.3*rate_in_kbit), duration, math.floor(0.19*rate_in_kbit) ))
+            iface, math.floor(0.2*rate_in_kbit), duration, math.floor(0.19*rate_in_kbit) ))
         os.execute(string.format("tc class change dev %s parent 1:1 classid 1:14 hfsc ls m2 %dkbit",
-            iface, math.floor(0.027*rate_in_kbit) ))
+            iface, math.floor(0.02*rate_in_kbit) ))
         os.execute(string.format("tc class change dev %s parent 1:1 classid 1:15 hfsc ls m2 %dkbit",
             iface, math.floor(0.01*rate_in_kbit) ))
         os.execute(string.format("tc class change dev %s parent 1:1 classid 1:16 hfsc ls m2 %dkbit",

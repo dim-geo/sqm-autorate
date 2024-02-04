@@ -230,7 +230,7 @@ function M.initialise(requires, settings)
 
     -- load UCI settings (if any)
     if settings.plugin then
-        local plugin_settings = settings.plugin("delay_histogram")
+        local plugin_settings = settings.plugin("delay_histogram_tm")
         local string_table = {}
         string_table[1] = "delay-histogram - settings:"
         if plugin_settings and plugin_settings ~= {} then
@@ -352,12 +352,12 @@ local function calculate_thresholds(histogram_no, print_it, now)
                     if count == 0 then
                         result = j
                     else
-                        logger(loglevel.INFO, "delay sum" )
-                        logger(loglevel.INFO, sum )
-                        logger(loglevel.INFO, "delay count" )
-                        logger(loglevel.INFO, count )
+                        logger(histogram_log_level, "delay sum" )
+                        logger(histogram_log_level, sum )
+                        logger(histogram_log_level, "delay count" )
+                        logger(histogram_log_level, count )
                         result = ceil(sum/count)
-                        logger(loglevel.INFO, result )
+                        logger(histogram_log_level, result )
                     end
                     break
                 end
